@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no"/>
+    <meta http-equiv="Access-Control-Allow-Origin: *" content="*" />
+    <title>Simple Map</title>
+    <!--<script src="https://dogtian.github.io/WebGis_FirstApplication/jquery-2.1.4.min.js"></script>-->
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/3.23/esri/css/esri.css">
+    <script src="https://js.arcgis.com/3.23/"></script>
+    <style>
+        html,body,.parent{height: 100%; overflow: hidden;}
+        .top{position: absolute; top: 0; left: 303px; right: 0; height: 0; background-color: lightblue; height: 70px}
+        .left{position: absolute; top: 0; left: 0;bottom: 0; width: 300px; background-color: lightseagreen;}
+        .right{position: absolute; z-index: 5; top: 70px; left: 303px; right: 0; bottom: 0; background-color: whitesmoke;display: flex; overflow: hidden;}
+        .center{position:absolute; top: 0; left: 300px;bottom: 0; width: 3px; background-color: teal; }
+        .top_t{margin-left: 20px;margin-top: 10px}
+        .map1{
+            flex:1;
+            border: darkgray;
+            margin: 1.5px 0.5px 1.5px 1.5px;
+            box-shadow: 0 1px 2px darkgray;
+            border-style: ridge;
+            z-index: 18;
+        }
+        .map2{
+            flex:1;
+            margin: 1.5px 1.5px 1.5px 0.5px;
+            -webkit-box-shadow: 0 0 15px #f3d42e;
+            box-shadow: 0 0 15px #f3d42e;
+            border-style: ridge;
+            z-index: 18;
+        }
+        *, *:before, *:after {
+            -moz-box-sizing: border-box;
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+        }
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+        h1, h2, h3 {
+            margin: 0;
+            font-weight: normal;
+        }
+        .section {
+            width: 295px;
+            margin: 7px auto;
+            height: 40px;
+            box-shadow: 0 1px 2px rgba( 0, 0, 0, .2 );
+            overflow: hidden;
+            -webkit-transition: .35s;
+            transition: .35s;
+        }
+        .title {
+            padding: 5px;
+            padding-top: 5px;
+            background:whitesmoke;
+            color: black;
+            cursor: pointer;
+            text-shadow: 0 1px 0 black;
+            width: 100%;
+            text-transform: capitalize;
+            font-family: 'Merriweather Sans', sans-serif;
+            font-style: italic;
+            position: relative;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            -webkit-user-select: none;
+            user-select: none;
+            z-index: 10;
+        }
+        .title:before, .title:after {
+            content: "∨";
+            display: block;
+            position: absolute;
+            right: 20px;
+            top: 5px;
+            font-style: normal;
+            height: 21px;
+            line-height: 1;
+            overflow: hidden;
+            font-family: FontAwesome;
+            font-size: 20px;
+            -webkit-transition: .35s;
+            transition: .35s;
+        }
+        .title:before {
+            z-index: 2;
+        }
+        .title:after {
+            top: 5px;
+            -webkit-transform: rotate( 180deg );
+            -ms-transform: rotate( 180deg );
+            -moz-transform: rotate( 180deg );
+            transform: rotate( 180deg );
+        }
+        .open .title:before {
+            height: 0;
+        }
+        .body {
+            font: 16px open, sans-serif;
+            background: #fff;
+            padding: 5px 5px 5px;
+            color: #777;
+            -moz-transform: translateY( -100% );
+            -ms-transform: translateY( -100% );
+            -webkit-transform: translateY( -100% );
+            transform: translateY( -100% );
+            overflow: hidden;
+            -webkit-transition: .35s;
+            transition: .35s;
+        }
+        .body h2:before {
+            content: '∧';
+            padding-right: 7px;
+        }
+        .section.open {
+            height: auto;
+        }
+        .open .body {
+            -webkit-transform: none;
+            -ms-transform: none;
+            -moz-transform: none;
+            transform: none;
+        }
+        .option{margin-right:3px;
+            background:whitesmoke;
+            padding: 2px;
+            margin-top: 2px;
+            color:black;
+        }
+    </style>
+
+    <!--地图显示与相关操作-->
+    <script>
+        var map,myid= 4;
+        function scheduleJob() {
+            require([
+                        "esri/map","dojo/dom","dojo/on",
+                        "esri/geometry/Point","dojo/domReady!",
+                        "esri/layers/ArcGISTiledMapServiceLayer",
+                        "esri/layers/WebTiledLayer",
+                        "esri/SpatialReference",
+                        "esri/layers/ArcGISDynamicMapServiceLayer"],
+                    function(Map,dom,on,Point,ArcGISTiledMapServiceLayer,WebTiledLayer,ArcGISDynamicMapServiceLayer) {
+                        var isFirst=true;
+                        on(dom.byId("scheduleJobBtns"), "click", scheduleJobs);
+                        map=new Map("map");
+                        scheduleJobs();
+                        map.on("mouse-wheel", function(event){
+                            dom.byId("inputTitle").value=map.getLevel();
+                            getMyScale();
+                        });
+                        //鼠标移动并显示坐标（经纬度）
+                        map.on("mouse-move", function (e) {
+                            var str= mercator2lonlat(e.mapPoint.x,e.mapPoint.y);
+                            document.getElementById("pcood").innerHTML="坐标：("+str.x+","+str.y+")";
+                        });
+                        //获取比例尺
+                        function getMyScale(){
+                            if(map.extent!=null)
+                            {
+                                //得到当前视野内地图范围地图坐标
+                                var maxX=map.extent.xmax;
+                                var minX=map.extent.xmin;
+                                var maxY=map.extent.ymax;
+                                var minY=map.extent.ymin;
+                                //地图控件（图片）的宽和高
+                                var imageWidth=map.width;
+                                var imageHeight=map.height;
+                                //当前地图视野中心的地图坐标
+                                var centerPoint = map.extent.getCenter();
+                                var centerX = centerPoint.x;
+                                var centerY = centerPoint.y;
+                                //当前屏幕的DPI（每英寸的点数）值
+                                var dpi=96;
+                                //当前屏幕单位米宽度上的点数
+                                var dots_per_m = dpi / 2.54 ;
+                                //地图控件宽度一半（以米为单位）
+                                var width_size_in_m = (imageWidth /2)/dots_per_m*10;
+                                scale=(maxX-centerX)/width_size_in_m;
+                                textChange(scale);
+                            }
+                        }
+                        //更改文字与比例尺
+                        function setText(scale){
+                            document.getElementById("stext").innerHTML=scale;
+                        }
+                        function setScaleWidth(scale){
+                            var canvas=document.getElementById('myCanvas');
+                            var cxt=canvas.getContext("2d")
+                            cxt.clearRect(0,0,canvas.width,canvas.height);
+                            var ctx=canvas.getContext('2d');
+                            ctx.fillStyle='black';
+                            ctx.fillRect(0,10,scale,3);
+                            var ctxq=canvas.getContext('2d');
+                            ctxq.fillRect(scale-2,5,2,5);
+                            var ctx2=canvas.getContext('2d');
+                            ctx2.fillRect(0,5,2,5);
+                        }
+                        function textChange(scale){
+                            var unit,scaleWidth;
+                            if(scale>0&&scale<=5){//换算20米
+                                unit = "5米";
+                                setText(unit);//更新文字
+                                setScaleWidth(20);//更新比例尺长度
+                            }else if(scale>5&&scale<=20){//换算20米
+                                unit = "20米";
+                                setText(unit);//更新文字
+                                setScaleWidth(25);//更新比例尺长度
+                            }else if(scale>20&&scale<=50){//换算50米
+                                unit = "50米";
+                                setText(unit);//更新文字
+                                setScaleWidth(50);//更新比例尺长度
+                            }else if(scale>50&&scale<=100){//换算20米
+                                unit = "100米";
+                                scaleWidth=parseInt(100*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>100&&scale<=200){//换算20米
+                                unit = "200米";
+                                scaleWidth=parseInt(200*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>200&&scale<=500){//换算20米
+                                unit = "500米";
+                                scaleWidth=parseInt(500*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>500&&scale<=1000){//换算20米
+                                unit = "1公里";
+                                scaleWidth=parseInt(1000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>1000&&scale<=2000){//换算20米
+                                unit = "2公里";
+                                scaleWidth=parseInt(2000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>2000&&scale<=5000){//换算20米
+                                unit = "5公里";
+                                scaleWidth=parseInt(5000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>5000&&scale<=10000){//换算20米
+                                unit = "10公里";
+                                scaleWidth=parseInt(10000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>10000&&scale<=20000){//换算20米
+                                unit = "20公里";
+                                scaleWidth=parseInt(20000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>20000&&scale<=25000){//换算20米
+                                unit = "25公里";
+                                scaleWidth=parseInt(25000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>25000&&scale<=50000){//换算20米
+                                unit = "50公里";
+                                scaleWidth=parseInt(50000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>50000&&scale<=100000){//换算20米
+                                unit = "100公里";
+                                scaleWidth=parseInt(100000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>100000&&scale<=200000){//换算20米
+                                unit = "200公里";
+                                scaleWidth=parseInt(200000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>200000&&scale<=250000){//换算20米
+                                unit = "250公里";
+                                scaleWidth=parseInt(250000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>250000&&scale<=500000){//换算20米
+                                unit = "500公里";
+                                scaleWidth=parseInt(500000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }else if(scale>500000&&scale<=1000000){//换算20米
+                                unit = "1000公里";
+                                scaleWidth=parseInt(1000000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            } else if(scale>1000000&&scale<=scale){//换算20米
+                                unit = "2000公里";
+                                scaleWidth=parseInt(2000000*264/2.54/scale);
+                                setText(unit);//更新文字
+                                setScaleWidth(scaleWidth);//更新比例尺长度
+                            }
+                        }
+                        //墨卡托转经纬度
+                        function mercator2lonlat(a,b){
+                            var lonlat={x:0,y:0};
+                            var x = a/20037508.34*180;
+                            var y = b/20037508.34*180;
+                            y= 180/Math.PI*(2*Math.atan(Math.exp(y*Math.PI/180))-Math.PI/2);
+                            lonlat.x = x;
+                            lonlat.y = y;
+                            return lonlat;
+                        }
+                        //初始化与地图修改
+                        function scheduleJobs() {
+                            var sel_obj = document.getElementById("myMap");
+                            var index = sel_obj.selectedIndex;
+                            var basemap=sel_obj.options[index].text;
+                            var myZoom = dom.byId("inputTitle").value;
+                            var myjd = dom.byId("jindu").value;
+                            var mywd = dom.byId("weidu").value;
+                            var myPoint = new Point(myjd, mywd);
+                            map.setZoom(myZoom);
+                            map.centerAt(myPoint);
+                            map.setBasemap(basemap);
+                            if(isFirst){
+                                document.getElementById("inlay").innerHTML = "";
+                                addElement(basemap);
+                                isFirst=false;
+                            }
+                            else{
+                                var mydiv=document.getElementsByClassName("option");
+                                document.getElementById("layer0").value=basemap;
+                                mydiv[0].childNodes[1].nodeValue=basemap;
+                            }
+                            getMyScale();
+                        }
+                        //动态添加图层函数
+                        function addMyLayers(mvalue){
+                            switch(mvalue)
+                            {
+                                case "Highway":
+                                    vtlayer = new ArcGISDynamicMapServiceLayer("http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Specialty/ESRI_StateCityHighway_USA/MapServer");
+                                    map.addLayer(vtlayer);
+                                    break;
+                                case "KGS":
+                                    vtlayer =  new ArcGISDynamicMapServiceLayer(
+                                            "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Petroleum/KGS_OilGasFields_Kansas/MapServer"
+                                    );
+                                    map.addLayer(vtlayer);
+                                    break;
+                                case "Sample":
+                                    vtlayer = new ArcGISDynamicMapServiceLayer(
+                                            "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Demographics/ESRI_Census_USA/MapServer",{"opacity":0.5}
+                                    );
+                                    map.addLayer(vtlayer);
+                                    break;
+                                default :
+                                    map.setBasemap(mvalue);
+                                    break;
+                            }
+                        }
+                        //动态增加控件（已添加列表）
+                        function addElement(str) {
+                            var mydiv=document.getElementById("inlay");
+                            var myd=document.createElement("div");
+                            myd.setAttribute("class","option");
+                            mydiv.appendChild(myd);
+                            var len = mydiv.querySelectorAll( 'div').length-1;
+                            var oCheckbox=document.createElement("input");
+                            var myText=document.createTextNode(str);
+                            oCheckbox.setAttribute("type","checkbox");
+                            oCheckbox.setAttribute("value",str);
+                            oCheckbox.setAttribute("checked","true");
+                            oCheckbox.setAttribute("id","layer"+len);
+                            myd.appendChild(oCheckbox);
+                            myd.appendChild(myText);
+                        }
+                        //删除已添加图层
+                        $(document).ready(function($) {
+                            $('.body ').on("dblclick","div[class='option']",function (event) {
+                                map.removeLayer(map.getLayer(this.childNodes[0].id));
+                                //移除到未添加列表
+                                mun=document.getElementById("unlay");
+                                mun.innerHTML+="<li > <input type='button'  id='"+(myid++)+"'value='"+this.childNodes[1].nodeValue+"' style='background: rgba(255,255,255,30);width: 250px;height: 30px' /><br></li>";
+                                //移除已添加列表
+                                this.parentNode.removeChild(this);
+                            })
+                        })
+                        //地图图层显示与隐藏
+                        $(document).ready(function($) {
+                            $('.body ').on("click","input[type='checkbox']",function (){
+                                layer = map.getLayer(this.id);
+                                if(!($(this).is(":checked")))
+                                {
+                                    layer.setVisibility(false);
+                                }
+                                else{
+                                    layer.setVisibility(true);
+                                }
+                            });
+                        });
+                        //添加图层点击事件
+                        $(document).ready(function(){
+                            $('.body ').on("click","input[type='button']",function (){
+                                //添加图层
+                                addElement(this.value);
+                                addMyLayers(this.value);
+                                //在未加载中移除选项
+                                var node=document.getElementById(this.id).parentNode;
+                                node.parentNode.removeChild(node);
+                            })
+                        })
+                    });
+        }
+    </script>
+
+    <!--菜单事件-->
+    <script>
+        function menu()  {
+            'use strict';
+            var titles = document.querySelectorAll( '.title' ),
+                    i = 0,
+                    len = titles.length;
+            for ( ; i < len; i++ )
+                titles[ i ].onclick = function( e ) {
+                    for ( var j = 0; j < len; j++ )
+                        if ( this != titles[ j ] )
+                            titles[ j ].parentNode.className = titles[ j ].parentNode.className.replace( / open/i, '' );
+                    var cn = this.parentNode.className;
+                    this.parentNode.className = ~cn.search( /open/i ) ? cn.replace( / open/i, '' ) : cn + ' open';
+                };
+        }
+    </script>
+
+    <!--地图联动-->
+    <script>
+        var isClose=false;//是否停止比较
+        //div显示隐藏
+        function HideOrVisible(){
+            if(!isClose) {
+                document.getElementById("map").style.display="none";
+                document.getElementById("mapCpare").style.display="block";
+                document.getElementById("mapCpare").innerHTML+= "<iframe id='mymap'  name='aa' width='100%' height='100%'" +
+                        "allowtransparency='true' style='background-color=transparent' frameborder='0'  scrolling='no'></iframe> "
+                self.frames['aa'].location.href="https://dogtian.github.io/WebGis_FirstApplication/demo3/compare.html";
+                isClose=true;
+            }else{
+                document.getElementById("map").style.display="block";
+                document.getElementById("mapCpare").style.display="none";
+                document.getElementById("mapCpare").innerHTML="";
+                isClose=false;
+            }
+        }
+    </script>
+    <!--地图卷帘-->
+    <script type="text/javascript">
+        var isEnd=false;
+        function swipe(){
+            if(!isEnd) {
+                document.getElementById("map").style.display="none";
+                document.getElementById("mapCpare").style.display="block";
+                document.getElementById("mapCpare").innerHTML+= "<iframe id='mymap'  name='aa' width='100%' height='100%'" +
+                        "allowtransparency='true' style='background-color=transparent' frameborder='0'  scrolling='no'></iframe> "
+                self.frames['aa'].location.href="https://dogtian.github.io/WebGis_FirstApplication/demo3/swipe.html";
+                isEnd=true;
+            }else{
+                document.getElementById("map").style.display="block";
+                document.getElementById("mapCpare").style.display="none";
+                document.getElementById("mapCpare").innerHTML="";
+                isEnd=false;
+            }
+        }
+    </script>
+</head>
+<body >
+<div class="parent">
+    <div class="top">
+        <input type="button" id="scheduleJobBtn" value="显示地图" class="top_t" onclick="scheduleJob()" />
+        <a class="top_t">缩放级别:</a>
+        <input id="inputTitle" type="text" class="top_t" value="5" placeholder="请输入缩放级别" />
+        <a class="top_t">经度:</a>
+        <input id="jindu" type="text" class="top_t" value="123" placeholder="请输入地图范围经度" />
+        <a class="top_t">纬度:</a>
+        <input id="weidu" type="text" class="top_t" value="30" placeholder="请输入地图范围纬度" />
+        <a class="top_t">请输入底图:</a>
+        <select class="top_t" id="myMap">
+            <option >topo</option>
+            <option >streets</option>
+            <option >satellite</option>
+        </select>
+        <input class="top_t" type="button" id="scheduleJobBtns" value="显示对应范围" class="submitButton" />
+    </div>
+
+    <div class="center"></div>
+
+    <div class="left">
+        <div id="in" class="section" onclick="menu()">
+            <div class="title">
+                已加载图层
+            </div>
+
+            <div id="inlay" class="body">
+            </div>
+        </div>
+
+        <div id="un" class="section" onclick="menu()">
+
+            <div class="title">
+                未加载图层
+            </div>
+
+            <div id="unlay"  class="body">
+                <li > <input type="button" id="1" value="Highway"  style="background: rgba(255,255,255,30);width: 250px;height: 30px" /><br></li>
+                <li > <input type="button"  id="2" value="KGS" style="background: rgba(255,255,255,30);width: 250px;height: 30px" /><br></li>
+                <li > <input type="button"  id="3" value="Sample" style="background: rgba(255,255,255,30);width: 250px;height: 30px" /><br></li>
+            </div>
+
+        </div>
+
+        <!--地图对比-->
+        <div id="rela" class="section" onclick="HideOrVisible()">
+            <div  class="title">
+                地图对比
+            </div>
+
+            <div id="compa" class="body">
+            </div>
+        </div>
+
+        <!--卷帘-->
+        <div id="jl" class="section" onclick="swipe()">
+            <div class="title">
+                卷帘
+            </div>
+
+            <div id="upon" class="body">
+            </div>
+        </div>
+    </div>
+
+    <div id="map" class="right">
+        <div id="pcood" style="background: rgba(0,0,0,0);position: fixed;z-index:12;bottom: 20px;left:50%;color:#000000;">坐标：</div>
+ 		<div id="scar" style="background: rgba(0,0,0,0);margin-top:20px;position: fixed;z-index:12;right:100px;color:#000000;">
+ 			<p id="stext"></p>
+            <canvas id="myCanvas" height="20" style="border:0px solid #c3c3c3;"></canvas>
+ 		</div>   
+    </div>
+    <div id="mapCpare" class="right" style="display: none;">
+    </div>
+
+</div>
+</body>
+</html>
